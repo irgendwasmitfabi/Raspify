@@ -43,6 +43,10 @@
     opacity: 0.8;
   }
 
+  &__idle-heading {
+    font-size: 110px;
+  }
+  
   &--active {
     align-items: center;
     justify-content: center;
