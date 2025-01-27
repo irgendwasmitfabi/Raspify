@@ -70,19 +70,20 @@ export default {
 
   methods: {
     getNow: function() {
-      const today = new Date();
-      const time = today.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-      this.timestamp = time;
+      const today = new Date()
+      const time = today.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+      this.timestamp = time
     },
     /**
      * Make the network request to Spotify to
      * get the current played track.
      */
-    async getNowPlaying() {
-      let data = {}
+     async getNowPlaying() {
+      let data = this.getEmptyPlayer()
+      let finalData = data;
 
       try {
-        const response = await fetch(
+        let response = await fetch(
           `${this.endpoints.base}/${this.endpoints.nowPlaying}`,
           {
             headers: {
@@ -91,11 +92,11 @@ export default {
           }
         )
 
-        /**
+         /**
          * Fetch error.
          */
         if (!response.ok) {
-          throw new Error(`An error has occured: ${response.status}`)
+          throw new Error(`An error has occurred: ${response.status}`)
         }
 
         /**
@@ -103,26 +104,46 @@ export default {
          * The connection was successful but there's no content to return.
          */
         if (response.status === 204) {
-          data = this.getEmptyPlayer()
           this.playerData = data
-
           this.$nextTick(() => {
-            this.$emit('spotifyTrackUpdated', data)
+            this.$emit('spotifyTrackUpdated', this.playerData)
           })
-
           return
         }
 
+        /**
+         * Handle currently playing episode
+         */
         data = await response.json()
-        this.playerResponse = data
+
+        if (data.currently_playing_type === "episode") {
+          response = await fetch(
+            `${this.endpoints.base}/${this.endpoints.nowPlayingEpisode}`,
+            {
+              headers: {
+                Authorization: `Bearer ${this.auth.accessToken}`
+              }
+            }
+          )
+
+          if (!response.ok) {
+            throw new Error(`An error has occurred: ${response.status}`)
+          }
+
+          finalData = await response.json()
+        } else {
+          finalData = data;
+        }
+
+        this.playerResponse = finalData
       } catch (error) {
         this.handleExpiredToken()
 
-        data = this.getEmptyPlayer()
-        this.playerData = data
+        finalData = this.getEmptyPlayer()
+        this.playerData = finalData;
 
         this.$nextTick(() => {
-          this.$emit('spotifyTrackUpdated', data)
+          this.$emit('spotifyTrackUpdated', finalData)
         })
       }
     },
@@ -226,6 +247,22 @@ export default {
        */
       if (this.playerResponse.item?.id === this.playerData.trackId) {
         return
+      }
+
+      /**
+       * Store the current active show episode
+      */
+      if (this.playerResponse.currently_playing_type === "episode") {
+        return this.playerData = {
+          playing: this.playerResponse.is_playing,
+          trackArtists: [this.playerResponse.item.show.name],
+          trackTitle: this.playerResponse.item.name,
+          trackId: this.playerResponse.item.id,
+          trackAlbum: {
+            title: this.playerResponse.item.show.name,
+            image: this.playerResponse.item.show.images[0].url
+          }
+        }
       }
 
       /**
